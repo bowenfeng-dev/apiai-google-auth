@@ -16,17 +16,36 @@
 process.env.DEBUG = 'actions-on-google:*';
 const App = require('actions-on-google').ApiAiApp;
 const functions = require('firebase-functions');
+const google = require('googleapis');
+const OAuth2 = google.auth.OAuth2;
+const oauth2Api = google.oauth2('v2');
 
-// [START YourAction]
+const config = functions.config();
+
+const CLIENT_ID = config.myoauth.cid;
+const CLIENT_SECRET = config.myoauth.cs;
+const REDIRECT_URL = config.myoauth.rurl;
+
 exports.yourAction = functions.https.onRequest((request, response) => {
   const app = new App({request, response});
-  console.log('Request headers: ' + JSON.stringify(request.headers));
-  console.log('Request body: ' + JSON.stringify(request.body));
 
-  // Fulfill action business logic
   function responseHandler (app) {
-    // Complete your fulfillment logic and send a response
-    app.tell('Hello, World!');
+    let token = app.getUser().accessToken;
+    if (!!token) {
+      console.log('User access toke: ' + token);
+
+      const oauth2Client = new OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
+      oauth2Client.setCredentials({
+        access_token: token
+      });
+      oauth2Api.userinfo.get({auth: oauth2Client}, (e, info) => {
+        console.log(e);
+        console.log(info);
+        app.tell('hello ' + info.name);
+      });
+    } else {
+      app.tell('Token is unavailable');
+    }
   }
 
   const actionMap = new Map();
@@ -34,4 +53,3 @@ exports.yourAction = functions.https.onRequest((request, response) => {
 
   app.handleRequest(actionMap);
 });
-// [END YourAction]
