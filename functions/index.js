@@ -19,6 +19,7 @@ const functions = require('firebase-functions');
 const google = require('googleapis');
 const OAuth2 = google.auth.OAuth2;
 const oauth2Api = google.oauth2('v2');
+const admin = require('firebase-admin');
 
 const config = functions.config();
 
@@ -26,26 +27,43 @@ const CLIENT_ID = config.myoauth.cid;
 const CLIENT_SECRET = config.myoauth.cs;
 const REDIRECT_URL = config.myoauth.rurl;
 
+admin.initializeApp(config.firebase);
+
 exports.yourAction = functions.https.onRequest((request, response) => {
   const app = new App({request, response});
 
   function responseHandler (app) {
     let token = app.getUser().accessToken;
-    if (!!token) {
-      console.log('User access toke: ' + token);
 
-      const oauth2Client = new OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
-      oauth2Client.setCredentials({
-        access_token: token
-      });
-      oauth2Api.userinfo.get({auth: oauth2Client}, (e, info) => {
-        console.log(e);
-        console.log(info);
-        app.tell('hello ' + info.name);
-      });
-    } else {
+    if (!token) {
+      console.log('User access token is unavailable.');
       app.tell('Token is unavailable');
     }
+
+    console.log('User access toke: ' + token);
+    const oauth2Client = new OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
+    oauth2Client.setCredentials({ access_token: token });
+    oauth2Api.userinfo.get({auth: oauth2Client}, (e, info) => {
+      console.log('oauth get userinfo response');
+      if (!!e) {
+        console.log('oauth was failed');
+        console.log(e);
+        app.tell('Unknown user.')
+      }
+
+      console.log('Got user email: ' + info.email);
+
+      admin.auth().getUserByEmail(info.email)
+        .then(user => {
+          console.log('Found user for email ' + info.email);
+          console.log(user);
+          app.tell('Hello ' + user.displayName);
+        })
+        .catch(e => {
+          console.log(e);
+          app.tell(`Couldn't find user for your email`);
+        });
+    });
   }
 
   const actionMap = new Map();
@@ -53,3 +71,5 @@ exports.yourAction = functions.https.onRequest((request, response) => {
 
   app.handleRequest(actionMap);
 });
+
+
