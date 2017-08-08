@@ -1,16 +1,3 @@
-// Copyright 2016, Google, Inc.
-// Licensed under the Apache License, Version 2.0 (the 'License');
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an 'AS IS' BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 'use strict';
 
 process.env.DEBUG = 'actions-on-google:*';
@@ -40,29 +27,13 @@ exports.yourAction = functions.https.onRequest((request, response) => {
       app.tell('Token is unavailable');
     }
 
-    console.log('User access toke: ' + token);
-    const oauth2Client = new OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
-    oauth2Client.setCredentials({ access_token: token });
-    oauth2Api.userinfo.get({auth: oauth2Client}, (e, info) => {
-      console.log('oauth get userinfo response');
-      if (!!e) {
-        console.log('oauth was failed');
-        console.log(e);
-        app.tell('Unknown user.')
-      }
-
-      console.log('Got user email: ' + info.email);
-
-      admin.auth().getUserByEmail(info.email)
-        .then(user => {
-          console.log('Found user for email ' + info.email);
-          console.log(user);
-          app.tell('Hello ' + user.displayName);
-        })
-        .catch(e => {
-          console.log(e);
-          app.tell(`Couldn't find user for your email`);
-        });
+    findFirebaseUser(token).then(user => {
+      console.log('Found user for email ' + user.email);
+      console.log(user);
+      app.tell('Hello ' + user.displayName);
+    }).catch(e => {
+      console.log(e);
+      app.tell(`Couldn't find registered user for you.`);
     });
   }
 
@@ -72,4 +43,29 @@ exports.yourAction = functions.https.onRequest((request, response) => {
   app.handleRequest(actionMap);
 });
 
+function findFirebaseUser(token) {
+  return findUserEmail(token).then(email => {
+    return admin.auth().getUserByEmail(email);
+  }).catch(e => {
+    return Promise.reject(e);
+  });
+}
 
+function findUserEmail(token) {
+  const oauth2Client = new OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URL);
+  oauth2Client.setCredentials({ access_token: token });
+  return new Promise((resolve, reject) => {
+    oauth2Api.userinfo.get({auth: oauth2Client}, (e, info) => {
+      console.log('Oauth get userinfo response');
+      console.log(info);
+      if (!!e) {
+        console.log('Oauth with token failed');
+        console.log(e);
+        reject(e);
+      } else {
+        console.log('Got user email: ' + info.email);
+        resolve(info.email);
+      }
+    });
+  });
+}
