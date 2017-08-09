@@ -30,7 +30,23 @@ exports.yourAction = functions.https.onRequest((request, response) => {
     findFirebaseUser(token).then(user => {
       console.log('Found user for email ' + user.email);
       console.log(user);
-      app.tell('Hello ' + user.displayName);
+      console.log('Getting user songs.')
+      readUserData(user).then(snapshot => {
+        console.log('Here is the user songs snapshot')
+        console.log('snapshot: ');
+        console.log(snapshot);
+        console.log('snapshot.key: ' + snapshot.key);
+        console.log('snapshot.val(): ' + snapshot.val());
+        snapshot.forEach(song => {
+          console.log('Processing one song: ');
+          console.log(song);
+          console.log('song.val(): ' + song.val());  // song content object
+          console.log('song.key: ' + song.key); // key of the song
+          console.log('song.val().title: ' + song.val().title);  // title of the song
+          song.ref.update({title: song.val().title + 'x'});
+        })
+        app.tell('Hello ' + user.displayName);
+      })
     }).catch(e => {
       console.log(e);
       app.tell(`Couldn't find registered user for you.`);
@@ -42,6 +58,12 @@ exports.yourAction = functions.https.onRequest((request, response) => {
 
   app.handleRequest(actionMap);
 });
+
+function readUserData(user) {
+  const uid = user.uid;
+  return admin.database().ref(`/users/${uid}/songs`)
+      .once('value');
+}
 
 function findFirebaseUser(token) {
   return findUserEmail(token).then(email => {
