@@ -16,6 +16,11 @@ const REDIRECT_URL = config.myoauth.rurl;
 
 admin.initializeApp(config.firebase);
 
+exports.minutely_job =
+functions.pubsub.topic('minutely-tick').onPublish(event => {
+  console.log("This job is ran every minute!");
+});
+
 exports.yourAction = functions.https.onRequest((request, response) => {
   const app = new App({request, response});
 
