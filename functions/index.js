@@ -67,18 +67,36 @@ exports.apiAiHandler = functions.https.onRequest((request, response) => {
   }
   
   function startSessionHandler(app) {
-    const type = request.body.result.parameters['SessionType'];
-    console.log(`New session with type ${type}`);
+    const sessionType = request.body.result.parameters['SessionType'];
+    console.log(`New session with type ${sessionType}`);
 
     let accessToken = app.getUser().accessToken;
     if (!accessToken) {
       console.log('User access token is unavailable.');
       app.tell('Access token is unavailable');
     }
-    
+
     findFirebaseUser(accessToken).then(user => {
       console.log(`Found user for email ${user.email} uid=${user.uid}`);
-      app.tell(`Now I know that you are ${type}. I'll reminde you to do some workout every 25 minutes.`);
+      const uid = user.uid;
+      const now = Date.now();
+      let db = admin.database();
+      Promise.all([
+        db.ref(`/users/${uid}/session`).set({
+          timestamp: now,
+          type: sessionType,
+          lastViewed: 0
+        }),
+        db.ref(`/schedules/${uid}`).set(now)
+      ]).then(results => {
+        console.log('Successfully updated the database');
+        console.log(results);
+        app.tell(`Now I know that you are ${sessionType}. I'll reminde you to do some workout every 25 minutes.`);
+      }).catch(error => {
+        console.log('Something went wrong.');
+        console.log(error);
+        app.tell(`Something went wrong, I couldn't start the session.`);
+      });
     });
   }
 
