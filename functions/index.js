@@ -14,11 +14,56 @@ const CLIENT_ID = config.myoauth.cid;
 const CLIENT_SECRET = config.myoauth.cs;
 const REDIRECT_URL = config.myoauth.rurl;
 
+const REMINDER_INTERVAL_IN_MS = 25 * 60 * 1000
+
 admin.initializeApp(config.firebase);
 
 exports.minutelyJob = functions.pubsub.topic('minutely-tick').onPublish(event => {
   console.log("This job is ran every minute!");
+  console.log(event);
+  
+  let db = admin.database();
+  db.ref(`/schedules`).once('value').then(schedules => {
+    console.log('Loop through all scheduled sessions');
+    const now = Date.now();
+    schedules.forEach(session => {
+      const uid = session.key;
+      const started = session.val();
+      const elapsed = now - started;
+      console.log(`Session: uid=${uid}, time=${started}, elapsed=${elapsed / 1000}s (${elapsed/60000.0}m)`);
+
+      if (elapsed >= REMINDER_INTERVAL_IN_MS) {
+        let lastViewed = db.ref(`/users/${uid}/session/lastViewed`);
+        lastViewed.once('value').then(snapshot => {
+          if (snapshot.val() == 0) {
+            sendNotification(uid);
+            db.ref(`/users/${uid}/session/lastViewed`).set(now);
+          }
+        });
+      }
+    });
+  });
 });
+
+function sendNotification(uid) {
+  console.log(`Need to send notification`);
+  getTokenByUid(uid).then(fcmToken => {
+    console.log(`FCM token for user ${uid} is ${fcmToken}`);
+    let payload = {
+      notification: {
+        title: `Now it's your exercise time.`,
+        body: `Stop working and relex your muscle by doing one simple exercise.`
+      },
+      data: {
+        exerciseId: new Date().toTimeString(), // TODO: Choose an actual exercise ID.
+      },
+    }
+    admin.messaging().sendToDevice(fcmToken, payload).then(() => {
+      console.log(`Notification was sent`);
+    });
+  });
+}
+
 
 exports.apiAiHandler = functions.https.onRequest((request, response) => {
   const app = new App({request, response});
@@ -110,14 +155,11 @@ exports.apiAiHandler = functions.https.onRequest((request, response) => {
   app.handleRequest(actionMap);
 });
 
-function readSongs(user) {
-  const uid = user.uid;
-  return admin.database().ref(`/users/${uid}/songs`)
-      .once('value');
+function getToken(user) {
+  return getTokenByUid(user.uid);
 }
 
-function getToken(user) {
-  const uid = user.uid;
+function getTokenByUid(uid) {
   return admin.database().ref(`/users/${uid}/settings`)
       .once('value')
       .then(snapshot => {
