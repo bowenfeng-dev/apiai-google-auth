@@ -16,13 +16,16 @@ const REDIRECT_URL = config.myoauth.rurl;
 
 admin.initializeApp(config.firebase);
 
-exports.minutely_job =
-functions.pubsub.topic('minutely-tick').onPublish(event => {
+exports.minutelyJob = functions.pubsub.topic('minutely-tick').onPublish(event => {
   console.log("This job is ran every minute!");
 });
 
-exports.yourAction = functions.https.onRequest((request, response) => {
+exports.apiAiHandler = functions.https.onRequest((request, response) => {
   const app = new App({request, response});
+
+  console.log(`apiAiHandler starts -------------------`);
+  console.log(request);
+  console.log(app);
 
   function responseHandler (app) {
     let token = app.getUser().accessToken;
@@ -35,24 +38,6 @@ exports.yourAction = functions.https.onRequest((request, response) => {
     findFirebaseUser(token).then(user => {
       console.log('Found user for email ' + user.email);
       console.log(user);
-      // console.log('Getting user songs.')
-      // readSongs(user).then(snapshot => {
-      //   console.log('Here is the user songs snapshot')
-      //   console.log('snapshot: ');
-      //   console.log(snapshot);
-      //   console.log('snapshot.key: ' + snapshot.key);
-      //   console.log('snapshot.val(): ' + snapshot.val());
-      //   snapshot.forEach(song => {
-      //     console.log('Processing one song: ');
-      //     console.log(song);
-      //     console.log('song.val(): ' + song.val());  // song content object
-      //     console.log('song.key: ' + song.key); // key of the song
-      //     console.log('song.val().title: ' + song.val().title);  // title of the song
-      //     song.ref.update({title: song.val().title + 'x'});
-      //   })
-      //   app.tell('Hello ' + user.displayName);
-      // });
-
       getToken(user)
           .then(token => {
             console.log(`token ${token}`);
@@ -80,9 +65,29 @@ exports.yourAction = functions.https.onRequest((request, response) => {
       app.tell(`Couldn't find registered user for you.`);
     });
   }
+  
+  function startSessionHandler(app) {
+    const type = request.body.result.parameters['SessionType'];
+    console.log(`New session with type ${type}`);
+
+    let accessToken = app.getUser().accessToken;
+    if (!accessToken) {
+      console.log('User access token is unavailable.');
+      app.tell('Access token is unavailable');
+    }
+    
+    findFirebaseUser(accessToken).then(user => {
+      console.log(`Found user for email ${user.email} uid=${user.uid}`);
+      app.tell(`Now I know that you are ${type}. I'll reminde you to do some workout every 25 minutes.`);
+    });
+  }
 
   const actionMap = new Map();
   actionMap.set('input.welcome', responseHandler);
+  actionMap.set('startSession', startSessionHandler);
+  console.log(actionMap);
+  
+  console.log('start handling request');
 
   app.handleRequest(actionMap);
 });
